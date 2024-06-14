@@ -1,0 +1,44 @@
+import (
+    "mat.um"
+
+    "th.um"
+    "window.um"
+
+    "gfx.um"
+    "scene.um"
+    "phys.um"
+    "hud.um"
+)
+
+var (
+    scene: gfx::Scene
+    camera: gfx::Camera
+    hud: hud::HUD
+    state: phys::State
+)
+
+fn init*() {
+    window::setup("SpaceSim", 800, 600)
+    
+    scene = scene::makeScene()
+
+    hud.setup("CourierPrime-Regular.ttf")
+
+    state.pos = {-15.0, -5.0, -2.0}
+    state.rot = mat::Vec{20.0, 0.0, 10.0}.mul(gfx::deg).toAttMat()
+
+    window::onFrame.register({
+        window::setViewport(window::getDims())
+        camera.setup(state.pos, state.rot, window::w, window::h, 30.0 * gfx::deg, 100)
+
+        if state.docked(scene.model.volumes[1]) {
+            hud.off(true)
+        } else if state.crashed(scene.model.volumes[0]) {
+            hud.off(false)
+        } else {
+            state.update(th::delta / 1000.0)
+            scene.render(&camera)
+            hud.draw(&state, &camera)
+        }       
+    })
+}

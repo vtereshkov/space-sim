@@ -1,0 +1,226 @@
+import (
+    "std.um"
+    "mat.um"
+
+    "th.um"
+    "canvas.um"
+    "ent.um"
+    "rect.um"
+)
+
+// X forward (symmetry axis)
+// Y rightward
+// Z downward
+
+const deg* = std::pi / 180.0
+
+type (
+    ScreenPoint* = struct {
+        point: th::Vf2 
+        subspace: [3]int   // {0, 0, 0} if visible
+    }
+
+    Quad* = [4]int
+
+    Color* = mat::Vec
+
+    Volume* = fn (point: mat::Vec): bool
+
+    Model* = struct {
+        verts: []mat::Vec
+        quads: []Quad
+        normals: []mat::Vec
+        centers: []mat::Vec
+        colors: []Color
+        volumes: []Volume
+    }
+
+    Background* = struct {
+        stars: []mat::Vec
+    }
+
+    Scene* = struct {
+        model: Model
+        background: Background
+        lightDir: mat::Vec
+    }
+
+    Camera* = struct {
+        pos: mat::Vec
+        rot, invRot: mat::Mat       
+        width, height, near: real
+        dpm: real 
+    }
+)
+
+fn (point: ^ScreenPoint) visible*(): bool {
+    return point.subspace[0] == 0 && point.subspace[1] == 0 && point.subspace[2] == 0
+}
+
+fn (camera: ^Camera) setup*(pos: mat::Vec, rot: mat::Mat, width, height, fov, dpi: real) {
+    camera.pos = pos
+    camera.rot = rot 
+    camera.invRot = rot.transpose()
+    camera.width = width
+    camera.height = height
+    camera.near = height / 2.0 * cos(fov / 2.0) / sin(fov / 2.0)
+    camera.dpm = dpi / 0.0254
+}
+
+fn (camera: ^Camera) perspective(point: mat::Vec): th::Vf2 {
+    if point[0] == 0.0 {
+        return {0, 0}
+    }
+    projFactor := camera.near / point[0]
+    return {
+        point[1] * projFactor + camera.width  / 2.0, 
+        point[2] * projFactor + camera.height / 2.0
+    }   
+}
+
+fn (camera: ^Camera) project*(point: mat::Vec): ScreenPoint {
+    cameraPoint := camera.invRot.mulv(point.sub(camera.pos))
+    screenPoint := ScreenPoint{point: camera.perspective(cameraPoint)}
+
+    if cameraPoint[0] < camera.near / camera.dpm {
+        screenPoint.subspace[0] = -1
+    }
+
+    if screenPoint.point.x < 0.0 {
+        screenPoint.subspace[1] = -1
+    } else if screenPoint.point.x > camera.width {
+        screenPoint.subspace[1] = 1
+    }
+
+    if screenPoint.point.y < 0.0 {
+        screenPoint.subspace[2] = -1
+    } else if screenPoint.point.y > camera.height {
+        screenPoint.subspace[2] = 1
+    }    
+
+    return screenPoint    
+}
+
+fn (model: ^Model) translate*(offset: mat::Vec) {
+    for _, vert^ in model.verts {
+        vert^ = vert.add(offset)
+    }
+}
+
+fn (model: ^Model) rotate*(rot: mat::Mat) {
+    for _, vert^ in model.verts {
+        vert^ = rot.mulv(vert^)
+    }
+}
+
+fn (model: ^Model) finalize*() {
+    model.normals = make([]mat::Vec, len(model.quads))
+    model.centers = make([]mat::Vec, len(model.quads))
+
+    for i, quad in model.quads {
+        vert1 := model.verts[quad[0]]
+        vert2 := model.verts[quad[1]]
+        vert3 := model.verts[quad[2]]
+        vert4 := model.verts[quad[3]]
+
+        model.normals[i] = vert1.sub(vert2).cross(vert2.sub(vert3)).normalize()
+        model.centers[i] = vert1.add(vert2).add(vert3).add(vert4).div(4.0)
+    }
+}
+
+fn umth_ent_ysort(ents: ^ent::Ent, count: int)
+
+fn ysort(ents: []ent::Ent) {
+    if len(ents) > 0 {
+        umth_ent_ysort(&ents[0], len(ents))
+    }
+}
+
+fn (model: ^Model) render(camera: ^Camera, lightDir: mat::Vec) {
+    // Projecting to screen
+    screenVerts := make([]ScreenPoint, len(model.verts))
+    for i, vert^ in model.verts {
+        screenVerts[i] = camera.project(vert^)
+    }
+
+    // Depth sorting
+    depths := []ent::Ent{}
+
+    for i, center^ in model.centers {
+        relPos := center.sub(camera.pos) 
+        quad := model.quads[i]
+
+        // Skipping invisible
+        if relPos.dot(model.normals[i]) > 0.0 {
+            continue
+        }
+
+        vert1 := screenVerts[quad[0]]
+        vert2 := screenVerts[quad[1]]
+        vert3 := screenVerts[quad[2]]
+        vert4 := screenVerts[quad[3]]
+
+        outside := false
+
+        for axis := 0; !outside && axis < 3; axis++ {
+            outside = vert1.subspace[axis] == vert2.subspace[axis] &&
+                      vert2.subspace[axis] == vert3.subspace[axis] &&
+                      vert3.subspace[axis] == vert4.subspace[axis] &&
+                      vert4.subspace[axis] != 0
+        }
+
+        if outside {
+            continue
+        }
+
+        var depthsItem: ent::Ent 
+        depthsItem.c = i                        // Abusing the color field to store the quad index
+        depthsItem.t.p.y = -relPos.norm()       // Abusing the y field to store the distance from the camera to the quad center
+        depths = append(depths, depthsItem)
+    }
+
+    ysort(depths)
+
+    // Drawing
+    for _, depthsItem^ in depths {
+        quadIndex := depthsItem.c 
+
+        quad   := model.quads[quadIndex]
+        normal := model.normals[quadIndex]
+
+        brightness := -lightDir.dot(normal)
+        if brightness < 0.2 {
+            brightness = 0.2
+        }
+
+        color := Color(mat::Vec(model.colors[quadIndex]).mul(brightness))
+        red   := round(255 * color[0])
+        green := round(255 * color[1])
+        blue  := round(255 * color[2])
+
+        canvas::drawQuad((red << 24) | (green << 16) | (blue << 8) | 0xFF, {
+            screenVerts[quad[0]].point,
+            screenVerts[quad[1]].point,
+            screenVerts[quad[2]].point,
+            screenVerts[quad[3]].point
+        })          
+
+    }   
+}
+
+fn (bkg: ^Background) render(camera: ^Camera) {
+    canvas::drawRect(0x000000FF, {0, 0, camera.width, camera.height})
+
+    for _, star^ in bkg.stars {
+        if screenPoint := camera.project(star^); screenPoint.visible() {
+            canvas::drawRect(th::white, rect::fromVf2(screenPoint.point, {1, 1}))
+        }    
+    }
+}
+
+fn (scene: ^Scene) render*(camera: ^Camera) {
+    scene.background.render(camera)
+    scene.model.render(camera, scene.lightDir)
+}
+
+

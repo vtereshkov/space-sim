@@ -1,0 +1,88 @@
+import (
+    "mat.um"
+
+    "input.um"
+
+    "gfx.um"
+)
+
+type (
+    State* = struct {
+        pos, vel: mat::Vec
+        rot: mat::Mat
+        att, rate: mat::Vec
+        precise: bool
+    }
+
+    Control = struct {
+        force, moment: mat::Vec
+    }
+)
+
+const (
+    // Spaceship (a solid ball)
+    mass            = 10000.0
+    diam            = 4.0
+    inertia         = 0.4 * mass * (diam / 2.0) * (diam / 2.0)
+
+    // RCS
+    momentThrottle  = 0.5
+    preciseThrottle = 0.25
+    thrust          = 500.0
+    force           = 2.0 * thrust
+    moment          = diam * thrust * momentThrottle
+)
+
+fn (state: ^State) control(): Control {
+    ctrl := Control{}
+
+    if input::isPressed(.w)             {ctrl.force[2] = -force}
+    if input::isPressed(.s)             {ctrl.force[2] =  force}
+    if input::isPressed(.a)             {ctrl.force[1] = -force}
+    if input::isPressed(.d)             {ctrl.force[1] =  force}
+    if input::isPressed(.e)             {ctrl.force[0] =  force}
+    if input::isPressed(.q)             {ctrl.force[0] = -force} 
+
+    if input::isPressed(.up)            {ctrl.moment[1] =  moment}
+    if input::isPressed(.down)          {ctrl.moment[1] = -moment}
+    if input::isPressed(.left)          {ctrl.moment[2] = -moment}
+    if input::isPressed(.right)         {ctrl.moment[2] =  moment}
+    if input::isPressed(.leftBracket)   {ctrl.moment[0] = -moment}
+    if input::isPressed(.rightBracket)  {ctrl.moment[0] =  moment}
+
+    if input::isJustPressed(.space)     {state.precise = !state.precise}
+
+    if state.precise {
+        ctrl.force = ctrl.force.mul(preciseThrottle)
+        ctrl.moment = ctrl.moment.mul(preciseThrottle)
+    }
+
+    return ctrl
+}
+
+fn (state: ^State) update*(dt: real) {
+    ctrl := state.control()
+
+    state.vel = state.vel.add(state.rot.mulv(ctrl.force).mul(dt / mass))
+    state.pos = state.pos.add(state.vel.mul(dt))
+
+    state.rate = state.rate.add(ctrl.moment.mul(dt / inertia))
+    state.rot = state.rot.add(state.rot.mulm(state.rate.toRateMat()).mul(dt)).normalize()
+
+    state.att = state.rot.toAttAngles()
+}
+
+fn (state: ^State) crashed*(volume: gfx::Volume): bool {
+    return volume(state.pos)
+}
+
+fn (state: ^State) docked*(volume: gfx::Volume): bool {
+    const (
+        maxVel = mat::Vec{0.5, 0.2, 0.2}
+        maxAng = 2.0 * gfx::deg
+    )
+
+    return volume(state.pos) && 
+        fabs(state.vel[0]) < maxVel[0] && fabs(state.vel[1]) < maxVel[1] && fabs(state.vel[2]) < maxVel[2] &&
+        fabs(state.att[0]) < maxAng    && fabs(state.att[1]) < maxAng    && fabs(state.att[2]) < maxAng
+}

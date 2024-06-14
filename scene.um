@@ -1,0 +1,202 @@
+import (
+    "std.um"
+    "mat.um"
+
+    "gfx.um"
+)
+
+fn makeSpaceship(): gfx::Model {
+    const (
+        // Service module
+        servDiam  = 4.0
+        servLen   = 3.0
+
+        // Crew module
+        noseDiam  = 1.5
+        crewLen   = 3.0
+
+        // Docking cone
+        coneDiam  = 1.0
+        coneDepth = 1.0
+
+        // Solar panels
+        panelLen   = 2.5
+        panelWidth = 2.5
+        panelSlope = 0.5
+    )
+
+    const numSideFaces = 120
+
+    ship := gfx::Model{}
+
+    // Body
+
+    // Nose and tail - common for all XY sections
+    ship.verts = append(ship.verts, mat::Vec{crewLen - coneDepth, 0, 0})
+    ship.verts = append(ship.verts, mat::Vec{-servLen, 0, 0})
+
+    // XY sections rotated about X
+    for i := 0; i < numSideFaces; i++ {
+        sectionVerts := []mat::Vec{
+            { crewLen, coneDiam / 2, 0},
+            { crewLen, noseDiam / 2, 0},
+            { 0,       servDiam / 2, 0},
+            {-servLen, servDiam / 2, 0}
+        }
+
+        sectionRot := mat::Vec{2 * std::pi * i / numSideFaces, 0, 0}.toAttMat()
+
+        for _, vert^ in sectionVerts {
+            vert^ = sectionRot.mulv(vert^)
+        }
+
+        ship.verts = append(ship.verts, sectionVerts)
+    }
+
+    for i := 0; i < numSideFaces; i++ {
+        curStart := 2 + i * 4
+        nextStart := 2 + ((i + 1) % numSideFaces) * 4
+
+        sectionQuads := []gfx::Quad{
+            {0,            curStart,      nextStart,     0            },
+            {curStart,     curStart  + 1, nextStart + 1, nextStart    },
+            {curStart + 1, curStart  + 2, nextStart + 2, nextStart + 1},
+            {curStart + 2, curStart  + 3, nextStart + 3, nextStart + 2},
+            {1,            nextStart + 3, curStart  + 3, 1            }
+        }
+
+        sectionColors := []gfx::Color{
+            {0.3, 0.3, 0.3},
+            {1.0, 1.0, 1.0},
+            {1.0, 1.0, 1.0},
+            (i / (numSideFaces / 20)) % 2 == 0 ? gfx::Color{1.0, 1.0, 1.0} : gfx::Color{0.2, 0.2, 0.2},
+            {1.0, 1.0, 1.0}
+        }
+
+        ship.quads = append(ship.quads, sectionQuads)
+        ship.colors = append(ship.colors, sectionColors)
+    }
+
+    // Solar panels
+
+    panelStart := len(ship.verts)
+
+    // Right panels
+    rightPanelsVerts := []mat::Vec{
+        // Inner
+        {-servLen / 2 + panelWidth / 2,  servDiam  / 2 + panelLen,     -panelSlope},
+        {-servLen / 2 + panelWidth / 2,  servDiam  / 2,                 0},
+        {-servLen / 2 - panelWidth / 2,  servDiam  / 2,                 0},
+        {-servLen / 2 - panelWidth / 2,  servDiam  / 2 + panelLen,     -panelSlope},
+
+        // Outer
+        {-servLen / 2 + panelWidth / 2,  servDiam  / 2 + panelLen * 2,  0},
+        {-servLen / 2 + panelWidth / 2,  servDiam  / 2 + panelLen,     -panelSlope},
+        {-servLen / 2 - panelWidth / 2,  servDiam  / 2 + panelLen,     -panelSlope},
+        {-servLen / 2 - panelWidth / 2,  servDiam  / 2 + panelLen * 2,  0}  
+    }
+
+    ship.verts = append(ship.verts, rightPanelsVerts)
+
+    rightPanelsQuads := []gfx::Quad{
+        // Inner
+        {panelStart,     panelStart + 1, panelStart + 2, panelStart + 3},
+        {panelStart + 3, panelStart + 2, panelStart + 1, panelStart    },
+
+        // Outer
+        {panelStart + 4, panelStart + 5, panelStart + 6, panelStart + 7},
+        {panelStart + 7, panelStart + 6, panelStart + 5, panelStart + 4}        
+    }
+
+    ship.quads = append(ship.quads, rightPanelsQuads)
+
+    rightPanelsColors := []gfx::Color{
+        // Inner
+        {0.2, 0.0, 0.4},
+        {0.2, 0.0, 0.4},
+
+        // Outer
+        {0.2, 0.0, 0.4},
+        {0.2, 0.0, 0.4}     
+    }
+
+    ship.colors = append(ship.colors, rightPanelsColors)    
+
+    // Left panels - copied from the right
+    leftPanelsVerts := rightPanelsVerts
+    for _, vert^ in leftPanelsVerts {
+        vert[1] -= servDiam + panelLen * 2
+    }
+
+    ship.verts = append(ship.verts, leftPanelsVerts)
+
+    leftPanelsQuads := rightPanelsQuads
+    for _, quad^ in leftPanelsQuads {
+        for _, v^ in quad^ {
+            v^ += 2 * 4
+        }
+    }
+
+    ship.quads = append(ship.quads, leftPanelsQuads)
+
+    leftPanelsColors := rightPanelsColors
+    ship.colors = append(ship.colors, leftPanelsColors)
+
+    // Transform model to the target coordinate frame of the docking ship: nose at origin, X backward
+    ship.translate({-crewLen, 0.0, 0.0})
+    ship.rotate(mat::Vec{0.0, 0.0, 180.0}.mul(gfx::deg).toAttMat())
+
+    // Detect collisions
+    const sqr = fn (x: real): real {return x * x}
+
+    ship.volumes = {
+        // Collision volume (cylinder)
+        {
+            const margin = 1.0
+            return sqr(point[1]) + sqr(point[2]) < sqr(servDiam / 2 + margin) && point[0] > -margin && point[0] < crewLen + servLen + margin
+        },
+
+        // Docking volume (cylinder)
+        {
+            const margin = 1.0
+            return sqr(point[1]) + sqr(point[2]) < sqr(coneDiam / 2) && point[0] > -margin && point[0] < coneDepth
+        }
+    }
+
+    ship.finalize()
+    return ship
+}
+
+fn makeStars(): gfx::Background {
+    const (
+        dist = 1e6
+        count = 1000
+    )
+
+    bkg := gfx::Background{}
+    bkg.stars = make([]mat::Vec, count)
+
+    for _, star^ in bkg.stars {
+        att := mat::Vec{
+            0.0,
+            (std::frand() - 0.5) * std::pi,
+            std::frand() * 2 * std::pi
+        }
+ 
+        star^ = att.toAttMat().mulv({dist, 0, 0})
+    }
+
+    return bkg
+}
+
+fn makeLight(): mat::Vec {
+    return {1, 1, 1}.normalize()
+}
+
+fn makeScene*(): gfx::Scene {
+    return {
+        makeSpaceship(),
+        makeStars(),
+        makeLight()
+    }
+}

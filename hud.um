@@ -1,0 +1,81 @@
+import (
+    "std.um"
+    
+    "th.um"
+    "canvas.um"
+    "window.um"
+    "font.um"
+
+    "gfx.um"
+    "phys.um"
+)
+
+type HUD* = struct {
+    font: font::Font
+}
+
+fn (hud: ^HUD) setup*(fontName: str) {
+    var err: std::Err
+    hud.font, err = font::load(fontName, 18, .linear)
+    std::exitif(err)
+}
+
+fn (hud: ^HUD) draw*(state: ^phys::State, camera: ^gfx::Camera) {
+    center := th::Vf2{window::w / 2.0, window::h / 2.0}
+
+    // Own spaceship's crosshair
+    const crosshairRatio = 0.6
+    crosshairSize := crosshairRatio * window::h / 2.0
+    
+    canvas::drawLine(th::green, {center.x - crosshairSize, center.y}, {center.x + crosshairSize, center.y}, 1)
+    canvas::drawLine(th::green, {center.x, center.y - crosshairSize}, {center.x, center.y + crosshairSize}, 1)
+
+    // Other spaceship's crosshair
+    const otherCrosshairLen = 1.0
+    if screenPoint := camera.project({0.0, 0.0, 0.0}); screenPoint.visible() {
+        horzAxis := [2]gfx::ScreenPoint{camera.project({0.0, -otherCrosshairLen,  0.0}), camera.project({0.0,  otherCrosshairLen,  0.0})}
+        vertAxis := [2]gfx::ScreenPoint{camera.project({0.0,  0.0, -otherCrosshairLen}), camera.project({0.0,  0.0,  otherCrosshairLen})}
+
+        canvas::drawLine(th::green, horzAxis[0].point, horzAxis[1].point, 1)
+        canvas::drawLine(th::green, vertAxis[0].point, vertAxis[1].point, 1)
+    }
+
+    // Position
+    pos := state.pos
+    hud.font.draw(sprintf("X %7.1f\nY %7.1f\nZ %7.1f", pos[0], pos[1], pos[2]), {center.x - 300, center.y + 200}, th::green, 1.0)
+    
+    // Velocity
+    vel := state.rot.transpose().mulv(state.vel)
+    hud.font.draw(sprintf("VX %7.2f\nVY %7.2f\nVZ %7.2f", vel[0], vel[1], vel[2]), {center.x - 150, center.y + 200}, th::green, 1.0)
+
+    // Attitude
+    att := state.att.div(gfx::deg)
+    hud.font.draw(sprintf("ROLL  %7.1f\nPITCH %7.1f\nYAW   %7.1f", att[0], att[1], att[2]), {center.x + 50, center.y + 200}, th::green, 1.0)
+
+    // Angular rate
+    rate := state.rate.div(gfx::deg)
+    hud.font.draw(sprintf("RX %7.1f\nRY %7.1f\nRZ %7.1f", rate[0], rate[1], rate[2]), {center.x + 200, center.y + 200}, th::green, 1.0)
+
+
+    // Precise control mode
+    if state.precise {
+        hud.font.draw("PRECISE", {center.x - 300, center.y + 260}, th::green, 1.0)
+    }
+
+    // FPS and help
+    hud.font.draw(sprintf("%.0f FPS\nTRANSLATION : WASD/QE\nROTATION    : ARROWS/[]\nPRECISE     : SPACEBAR", 1000.0 / th::delta), {10, 10}, th::white, 1.0)
+}
+
+fn (hud: ^HUD) off*(ok: bool) {
+    canvas::drawRect(0x000000FF, {0, 0, window::w, window::h})
+
+    if ok {
+        msg := "DOCKED - CAMERA OFF"
+        msgSize := hud.font.measure(msg)
+        hud.font.draw(msg, {window::w / 2 - msgSize.x / 2, window::h / 2 - msgSize.y / 2}, th::green, 1.0)
+    } else {
+        msg := "NO SIGNAL"
+        msgSize := hud.font.measure(msg)
+        hud.font.draw(msg, {window::w / 2 - msgSize.x / 2, window::h / 2 - msgSize.y / 2}, th::red, 1.0)
+    }
+}

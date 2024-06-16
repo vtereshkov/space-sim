@@ -174,8 +174,8 @@ fn (model: ^Model) render(camera: ^Camera, lightDir: mat::Vec) {
         }
 
         var depthsItem: ent::Ent 
-        depthsItem.c = i                        // Abusing the color field to store the quad index
-        depthsItem.t.p.y = -relPos.norm()       // Abusing the y field to store the distance from the camera to the quad center
+        depthsItem.c = i                                // Abusing the color field to store the quad index
+        depthsItem.t.p.y = -1000.0 * relPos.norm()      // Abusing the y field to store the distance from the camera to the quad center
         depths = append(depths, depthsItem)
     }
 

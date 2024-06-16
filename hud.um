@@ -32,7 +32,7 @@ fn (hud: ^HUD) draw*(state: ^phys::State, camera: ^gfx::Camera) {
 
     // Other spaceship's crosshair
     const otherCrosshairLen = 1.0
-    if screenPoint := camera.project({0.0, 0.0, 0.0}); screenPoint.visible() {
+    if screenPoint := camera.project({0.0, 0.0, 0.0}); screenPoint.visible() && camera.pos[0] < 0.0 {
         horzAxis := [2]gfx::ScreenPoint{camera.project({0.0, -otherCrosshairLen,  0.0}), camera.project({0.0,  otherCrosshairLen,  0.0})}
         vertAxis := [2]gfx::ScreenPoint{camera.project({0.0,  0.0, -otherCrosshairLen}), camera.project({0.0,  0.0,  otherCrosshairLen})}
 

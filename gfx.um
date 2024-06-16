@@ -20,6 +20,8 @@ type (
         subspace: [3]int   // {0, 0, 0} if visible
     }
 
+    ScreenQuad* = [4]ScreenPoint
+
     Quad* = [4]int
 
     Color* = mat::Vec
@@ -57,6 +59,25 @@ fn (point: ^ScreenPoint) visible*(): bool {
     return point.subspace[0] == 0 && point.subspace[1] == 0 && point.subspace[2] == 0
 }
 
+fn (quad: ^ScreenQuad) visible*(): bool {
+    // Heuristic: no visible vertices, at least one behind
+    if !quad[0].visible() && !quad[1].visible() && !quad[2].visible() && !quad[3].visible() &&
+        quad[0].subspace[0] + quad[1].subspace[0] + quad[2].subspace[0] + quad[3].subspace[0] < 0 {
+            return false
+    } 
+
+    for axis := 0; axis < 3; axis++ {
+        if quad[0].subspace[axis] == quad[1].subspace[axis] &&
+           quad[1].subspace[axis] == quad[2].subspace[axis] &&
+           quad[2].subspace[axis] == quad[3].subspace[axis] &&
+           quad[3].subspace[axis] != 0 {
+                return false
+        }
+    }
+
+    return true
+}
+
 fn (camera: ^Camera) setup*(pos: mat::Vec, rot: mat::Mat, width, height, fov, dpi: real) {
     camera.pos = pos
     camera.rot = rot 
@@ -69,6 +90,7 @@ fn (camera: ^Camera) setup*(pos: mat::Vec, rot: mat::Mat, width, height, fov, dp
 
 fn (camera: ^Camera) perspective(point: mat::Vec): th::Vf2 {
     if point[0] == 0.0 {
+
         return {0, 0}
     }
     projFactor := camera.near / point[0]
@@ -155,21 +177,7 @@ fn (model: ^Model) render(camera: ^Camera, lightDir: mat::Vec) {
             continue
         }
 
-        vert1 := screenVerts[quad[0]]
-        vert2 := screenVerts[quad[1]]
-        vert3 := screenVerts[quad[2]]
-        vert4 := screenVerts[quad[3]]
-
-        outside := false
-
-        for axis := 0; !outside && axis < 3; axis++ {
-            outside = vert1.subspace[axis] == vert2.subspace[axis] &&
-                      vert2.subspace[axis] == vert3.subspace[axis] &&
-                      vert3.subspace[axis] == vert4.subspace[axis] &&
-                      vert4.subspace[axis] != 0
-        }
-
-        if outside {
+        if !ScreenQuad{screenVerts[quad[0]], screenVerts[quad[1]], screenVerts[quad[2]], screenVerts[quad[3]]}.visible() {
             continue
         }
 

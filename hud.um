@@ -1,5 +1,6 @@
 import (
     "std.um"
+    "mat.um"
     
     "th.um"
     "canvas.um"
@@ -14,9 +15,11 @@ type HUD* = struct {
     font: font::Font
 }
 
+const fontSize = 18
+
 fn (hud: ^HUD) setup*(fontName: str) {
     var err: std::Err
-    hud.font, err = font::load(fontName, 18, .linear)
+    hud.font, err = font::load(fontName, fontSize, .linear)
     std::exitif(err)
 }
 
@@ -40,6 +43,26 @@ fn (hud: ^HUD) draw*(state: ^phys::State, camera: ^gfx::Camera) {
         canvas::drawLine(th::green, vertAxis[0].point, vertAxis[1].point, 1)
     }
 
+    // Horizon line
+    horizonDir := mat::Vec{state.att[0], 0.0, 0.0}.toAttMat().mulv({0.0, crosshairSize * 0.5, 0.0}) 
+    horizonHeight := camera.near * state.att[1]
+    if horizonHeight > crosshairSize {
+        horizonHeight = crosshairSize
+    } else if horizonHeight < -crosshairSize {
+        horizonHeight = -crosshairSize
+    }
+    canvas::drawLine(th::green, center.add({-horizonDir[1], horizonHeight + horizonDir[2]}), center.add({horizonDir[1], horizonHeight - horizonDir[2]}), 1)
+
+    // Yaw line
+    yawOffset := -camera.near * state.att[2]
+    if yawOffset > crosshairSize {
+        yawOffset = crosshairSize
+    } else if yawOffset < -crosshairSize {
+        yawOffset = -crosshairSize
+    }
+    canvas::drawLine(th::green, center.add({yawOffset, -crosshairSize * 1.4}), center.add({yawOffset, -crosshairSize * 1.1}), 1)
+
+
     // Position
     pos := state.pos
     hud.font.draw(sprintf("X %7.1f\nY %7.1f\nZ %7.1f", pos[0], pos[1], pos[2]), {center.x - 300, center.y + 200}, th::green, 1.0)
@@ -48,14 +71,13 @@ fn (hud: ^HUD) draw*(state: ^phys::State, camera: ^gfx::Camera) {
     vel := state.rot.transpose().mulv(state.vel)
     hud.font.draw(sprintf("VX %7.2f\nVY %7.2f\nVZ %7.2f", vel[0], vel[1], vel[2]), {center.x - 150, center.y + 200}, th::green, 1.0)
 
-    // Attitude
+    // Attitude and angular rate
     att := state.att.div(gfx::deg)
-    hud.font.draw(sprintf("ROLL  %7.1f\nPITCH %7.1f\nYAW   %7.1f", att[0], att[1], att[2]), {center.x + 50, center.y + 200}, th::green, 1.0)
-
-    // Angular rate
     rate := state.rate.div(gfx::deg)
-    hud.font.draw(sprintf("RX %7.1f\nRY %7.1f\nRZ %7.1f", rate[0], rate[1], rate[2]), {center.x + 200, center.y + 200}, th::green, 1.0)
 
+    hud.font.draw(sprintf("%4.1f [%+3.1f]", att[0], rate[0]), {center.x - crosshairSize - 7 * fontSize, center.y - fontSize / 2}, th::green, 1.0)
+    hud.font.draw(sprintf("%4.1f [%+3.1f]", att[1], rate[1]), {center.x + crosshairSize + 10, center.y - fontSize / 2}, th::green, 1.0)
+    hud.font.draw(sprintf("%4.1f [%+3.1f]", att[2], rate[2]), {center.x - 2 * fontSize, center.y - crosshairSize * 1.4 - 2 * fontSize}, th::green, 1.0)
 
     // Precise control mode
     if state.precise {
@@ -63,7 +85,7 @@ fn (hud: ^HUD) draw*(state: ^phys::State, camera: ^gfx::Camera) {
     }
 
     // FPS and help
-    hud.font.draw(sprintf("%.0f FPS\nTRANSLATION : WASD/QE\nROTATION    : ARROWS/[]\nPRECISE     : SPACEBAR", 1000.0 / th::delta), {10, 10}, th::white, 1.0)
+    hud.font.draw(sprintf("%.0f FPS\nTRANSLATION : WASD/QE\nROTATION    : ARROWS/,.\nPRECISE     : SPACEBAR", 1000.0 / th::delta), {10, 10}, th::white, 1.0)
 }
 
 fn (hud: ^HUD) off*(ok: bool) {

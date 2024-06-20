@@ -45,10 +45,10 @@ fn (state: ^State) control(): Control {
 
     if input::isPressed(.up)            {ctrl.moment[1] =  moment}
     if input::isPressed(.down)          {ctrl.moment[1] = -moment}
-    if input::isPressed(.left)          {ctrl.moment[2] = -moment}
-    if input::isPressed(.right)         {ctrl.moment[2] =  moment}
-    if input::isPressed(.leftBracket)   {ctrl.moment[0] = -moment}
-    if input::isPressed(.rightBracket)  {ctrl.moment[0] =  moment}
+    if input::isPressed(.left)          {ctrl.moment[0] = -moment}
+    if input::isPressed(.right)         {ctrl.moment[0] =  moment}
+    if input::isPressed(.comma)         {ctrl.moment[2] = -moment}
+    if input::isPressed(.dot)           {ctrl.moment[2] =  moment}
 
     if input::isJustPressed(.space)     {state.precise = !state.precise}
 

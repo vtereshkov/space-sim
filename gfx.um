@@ -4,7 +4,6 @@ import (
 
     "th.um"
     "canvas.um"
-    "ent.um"
     "rect.um"
 )
 
@@ -150,14 +149,6 @@ fn (model: ^Model) finalize*() {
     }
 }
 
-fn umth_ent_ysort(ents: ^ent::Ent, count: int)
-
-fn ysort(ents: []ent::Ent) {
-    if len(ents) > 0 {
-        umth_ent_ysort(&ents[0], len(ents))
-    }
-}
-
 fn (model: ^Model) render(camera: ^Camera, lightDir: mat::Vec) {
     // Projecting to screen
     screenVerts := make([]ScreenPoint, len(model.verts))
@@ -166,7 +157,12 @@ fn (model: ^Model) render(camera: ^Camera, lightDir: mat::Vec) {
     }
 
     // Depth sorting
-    depths := []ent::Ent{}
+    type Depth = struct {
+        index: int 
+        depth: real
+    }
+
+    depths := []Depth{}
 
     for i, center^ in model.centers {
         relPos := center.sub(camera.pos) 
@@ -181,17 +177,14 @@ fn (model: ^Model) render(camera: ^Camera, lightDir: mat::Vec) {
             continue
         }
 
-        var depthsItem: ent::Ent 
-        depthsItem.c = i                                // Abusing the color field to store the quad index
-        depthsItem.t.p.y = -1000.0 * relPos.norm()      // Abusing the y field to store the distance from the camera to the quad center
-        depths = append(depths, depthsItem)
+        depths = append(depths, Depth{i, relPos.norm()})
     }
 
-    ysort(depths)
+    sort(depths, false, depth)
 
     // Drawing
-    for _, depthsItem^ in depths {
-        quadIndex := depthsItem.c 
+    for _, depth^ in depths {
+        quadIndex := depth.index 
 
         quad   := model.quads[quadIndex]
         normal := model.normals[quadIndex]

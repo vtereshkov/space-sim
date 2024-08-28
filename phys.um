@@ -78,11 +78,13 @@ fn (state: ^State) crashed*(volume: gfx::Volume): bool {
 
 fn (state: ^State) docked*(volume: gfx::Volume): bool {
     const (
-        maxVel = mat::Vec{0.5, 0.2, 0.2}
-        maxAng = 2.0 * gfx::deg
+        maxVelX = 0.5
+        maxVelY = 0.2
+        maxVelZ = 0.2
+        maxAng  = 2.0 * gfx::deg
     )
 
     return volume(state.pos) && 
-        fabs(state.vel[0]) < maxVel[0] && fabs(state.vel[1]) < maxVel[1] && fabs(state.vel[2]) < maxVel[2] &&
-        fabs(state.att[0]) < maxAng    && fabs(state.att[1]) < maxAng    && fabs(state.att[2]) < maxAng
+        fabs(state.vel[0]) < maxVelX && fabs(state.vel[1]) < maxVelY && fabs(state.vel[2]) < maxVelZ &&
+        fabs(state.att[0]) < maxAng  && fabs(state.att[1]) < maxAng  && fabs(state.att[2]) < maxAng
 }
